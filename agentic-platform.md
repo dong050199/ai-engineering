@@ -1,30 +1,37 @@
-# RFC: Enterprise AI Agent Platform Architecture & Strategy
+# RFC: Enterprise AI Agent Platform (AICP) Architecture & Strategy
 
 - **Author:** Engineering & Technology Leadership
-- **Status:** Draft / Proposed for Review
+- **Status:** Proposed / Under Review
 - **Date:** October 2026
-- **Target Audience:** Architecture Review Board, Engineering Leadership, Platform Teams
+- **Target Audience:** Architecture Review Board, Platform Engineering, Technology Leadership
 
 ---
 
-## 1. Objective & Background
+## 1. Overview & Problem Statement
 
-### 1.1 Executive Summary
+### 1.1 Context
 AI is rapidly shifting from interactive chat assistants that help humans perform individual actions toward autonomous agents capable of independently executing multi-step workflows. This transition is already clearly visible in developer workflows: coding agents (e.g., Claude Code, OpenAI Codex, Google Jules) can inspect repositories, modify code, run tests, work asynchronously, and propose changes for human review.
 
-The primary engineering challenge is no longer model capability; it is providing a robust, enterprise-grade infrastructure layer that allows agents to safely:
-* Execute work within isolated, secure environments;
-* Access company systems and standard tools consistently;
-* Operate under proper machine identities and role-based permissions;
-* Retain execution state across long-running, multi-day tasks;
-* Register, discover, and reuse capabilities dynamically;
-* Operate autonomously on schedules or event triggers;
-* Enforce human-in-the-loop approvals for sensitive modifications;
-* Provide comprehensive observability into actions, costs, and outcomes.
+### 1.2 Problem Statement
+While individual teams are adopting AI coding tools and assistants, the organization lacks a unified platform layer. Currently, teams are independently solving foundational infrastructure challenges:
 
-This mirrors the strategic direction of major cloud platforms (such as Google’s Gemini Enterprise Agent Platform and OpenAI's Agents API), which provide modular capabilities across runtimes, registries, identity management, gateways, and governance.
+- **Fragmented Tooling:** Multiple teams building bespoke integrations for GitHub, Jira, and Slack.
+- **Security & Auth Gaps:** Uncontrolled API keys, lack of proper machine identities, and missing user-delegated authorization (3LO).
+- **Isolation Risks:** Running untrusted agentic code and shell commands without standardized microVM sandboxing.
+- **Cost & State Inefficiency:** Inability to persist, suspend, and resume long-running agent sessions across durable storage and ephemeral workers.
 
-### 1.2 Core Proposal (Hypothesis)
+### 1.3 Goals
+
+- Provide a standardized, secure, enterprise-wide platform for building, running, and governing AI agents.
+- Establish core primitives: runtime/sandboxing, catalog, identity/auth, governance, and observability.
+- Start with an engineering beachhead (coding, incident investigation, release automation) before expanding horizontally across Product, Operations, Security, and Finance.
+
+### 1.4 Non-Goals
+
+- Rebuilding foundational LLM models; we will integrate with Claude, GPT/Codex, and Gemini.
+- Replacing existing developer harnesses; we will integrate with Claude Code, Cursor, and ADK.
+
+### 1.5 Core Proposal (Hypothesis)
 We propose designing and building a company-wide **AI Agent Platform (AICP)** that provides shared, standardized infrastructure for teams to build, run, discover, and govern AI agents.
 
 This platform should serve as the enterprise substrate for agent execution, identity, orchestration, and policy enforcement. While developer workflows are the natural initial beachhead, the capability must be designed as a horizontal platform for Product, Operations, Security, Finance, HR, and Support functions over time.
@@ -73,11 +80,39 @@ An agent performing real operational work requires underlying platform primitive
 
 ---
 
-## 3. Industry Landscape & Reference Architecture
+## 3. Proposed Architecture & Core Primitives
 
-Our cross-industry research (covering Google Gemini Enterprise Agent Platform, OpenAI Codex/Agents API, and Anthropic Claude Code) shows a strong convergence around modular platform primitives.
+The platform is architected around five capability pillars inspired by modern hyperscale agent substrates (such as Google’s Gemini Enterprise Agent Platform and OpenAI’s Agents API):
 
-### 3.1 Google Reference Architecture
+```mermaid
+flowchart TB
+    subgraph AI_AGENT_PLATFORM [Enterprise AI Agent Platform - AICP]
+        Runtime[1. Runtime & Sandboxing\n• MicroVM Isolation\n• Session State & Suspend/Resume]
+        Catalog[2. Agent Catalog\n• Agent Registry\n• MCP Servers & Tools]
+        Identity[3. Identity & Auth\n• Machine Identities\n• 3LO Credential Broker]
+        Governance[4. Governance & Gateway\n• Policy Enforcement\n• Approval Gates]
+        Observability[5. Observability\n• Execution Tracing\n• Cost Attribution]
+    end
+
+    AI_AGENT_PLATFORM --> Company_Systems[Company Enterprise Systems]
+```
+
+### 3.1 Decoupled Execution (Logical Agents vs. Physical Workers)
+
+To optimize compute cost and scaling, we separate logical agent state from execution workers:
+
+- **Logical Agent State:** Persisted in durable storage (Memory / State Store) independent of compute instances.
+- **Ephemeral Compute:** Scheduled execution maps logical agents onto ephemeral worker pools and microVM sandboxes on demand.
+- **Suspend & Resume:** Idle or approval-pending agents are snapshotted and evicted from compute nodes, reclaiming resources while preserving execution state.
+
+### 3.2 Authentication Patterns: Agent-Owned vs. User-Delegated
+
+The platform secures enterprise integrations through two authorization flows:
+
+1. **Agent-Owned (2LO):** Agent → API Key / OAuth → External System
+2. **User-Delegated (3LO):** Human User → Consent / OAuth → Platform Auth Manager → Token Exchange → Agent Acting on User Behalf → Enterprise Tool
+
+### 3.3 Google Reference Architecture
 Google’s Agent Platform cleanly separates concerns across the agent lifecycle:
 
 ```mermaid
@@ -119,48 +154,22 @@ flowchart TB
 
 ---
 
-## 4. Proposed Architecture: Core Platform Primitives
+## 4. Initial Beachhead: Engineering Workflows
 
-We propose organizing the platform into five core capability pillars:
+Engineering serves as the initial deployment domain due to high AI adoption and structured pipelines:
 
 ```mermaid
-flowchart TB
-    subgraph AICP[AI AGENT PLATFORM]
-        Runtime[Runtime\n• MicroVM Sandbox\n• Sessions\n• Suspension / Resume]
-        Catalog[Catalog\n• Agent Registry\n• Skills & Tools\n• MCP Servers]
-        Identity[Identity & Auth\n• Machine Identities\n• Credential Broker\n• 3LO Delegation]
-        Governance[Governance & Gateway\n• Policy Enforcement\n• Approval Gates\n• Network Guardrails]
-        Observability[Observability\n• Execution Tracing\n• Cost Attribution\n• Audit Trails]
-    end
-
-    AICP --> Company_Systems[Company Enterprise Systems]
+flowchart LR
+    Ticket[Ticket] --> Coding_Agent[Coding Agent] --> Repo[Repo Analysis] --> Impl[Implementation] --> Tests[Run Tests] --> PR[Create PR] --> Review[Human Review]
 ```
 
----
-
-## 5. Architectural Separation: Logical Agents vs. Physical Workers
-
-To optimize cost and resource scaling, we will adopt a decoupled worker model that separates durable agent state from short-lived compute capacity:
-
-- **Logical Agent State:** Persisted in durable storage (Memory / State Store) independent of compute instances.
-- **Ephemeral Compute:** Scheduled execution maps logical agents onto ephemeral worker pools and microVM sandboxes on demand.
-- **Suspend & Resume:** Idle or approval-pending agents are snapshotted and evicted from compute nodes, reclaiming resources while preserving execution state.
+- **Autonomous Coding:** Ticket → Coding Agent → Repo Analysis → Implementation → Tests → PR → Human Review
+- **Incident Investigation:** Alert → Incident Agent → Log/Metric Inspection → Deploy Check → Root Cause Report
+- **Release Automation:** Release Request → Validation → Tests → Policy Check → Approval → Deploy & Monitor
 
 ---
 
-## 6. Initial Beachhead: Engineering Workflows
-
-Engineering is the proposed initial domain due to high AI adoption and structured pipelines:
-
-1. **Autonomous Coding:** Ticket → Coding Agent → Repo Analysis → Implementation → Validation → Tests → PR → Human Review
-
-2. **Incident Investigation:** Alert → Incident Agent → Log/Metric Inspection → Deploy Check → Root Cause Report
-
-3. **Release Automation:** Release Request → Validation → Tests → Policy Check → Approval → Deploy & Monitor
-
----
-
-## 7. Build vs. Reuse Strategy
+## 5. Build vs. Reuse Strategy
 
 | We Should Provide (Platform Layer) | We Should Integrate With (Ecosystem) |
 | :--- | :--- |
@@ -175,25 +184,24 @@ This keeps the platform model- and harness-agnostic, positioning it as the enter
 
 ---
 
-## 8. Proposed Pilot & Validation Strategy
+## 6. Rollout & Validation Strategy (Pilot Phase)
 
 Rather than building a monolithic platform upfront, we propose a focused engineering pilot to validate core primitives:
 
 ```mermaid
-flowchart LR
-    CLI[CLI / UI] --> Session[Agent Session]
+flowchart TD
+    CLI_UI[AICP CLI / UI] --> Session[Agent Session]
     Session --> Sandbox[Remote Sandbox]
     Sandbox --> Harness[Existing Agent Harness]
     Harness --> Workspace[Workspace / Repo Context]
     Workspace --> MCP[GitHub / Jira MCP Server]
-    MCP --> Gov[Approval + Observability]
-    Gov --> Audit[Policy Enforcement & Audit Trail]
+    MCP --> Governance[Approval + Observability]
+    Governance --> Audit[Policy Enforcement & Audit Trail]
 ```
 
-### Success Metrics for the Pilot
-1. Do developers successfully delegate multi-step engineering tasks to autonomous agents?
-2. Does remote sandbox isolation eliminate local setup friction and reduce security risk?
-3. Does centralized identity and user-delegated auth (3LO) work seamlessly with enterprise tools?
-4. Can we accurately measure cost, reliability, and operational outcomes per agent task?
+### 6.1 Success Metrics for the Pilot
+1. **Developer Productivity:** Measure time saved on multi-step engineering and PR creation tasks.
+2. **Security & Compliance:** Validate that remote microVM sandboxing and 3LO credential delegation eliminate credential leaks.
+3. **Operational Reliability:** Evaluate execution success rates and compute resource reclamation via suspend/resume mechanics.
 
 This pilot should validate the minimum viable platform layer before broader rollout across other enterprise functions.
